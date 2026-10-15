@@ -13,14 +13,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, Stack } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { ChevronLeft, Camera, Check, ImagePlus, X } from 'lucide-react-native';
+import { ChevronLeft, Camera, Check, ImagePlus, X, Heart, MessageCircle, Scale, Zap, ChevronRight, Sparkles } from 'lucide-react-native';
 import { Button } from '@/components/Button';
 import { Chip } from '@/components/Chip';
 import { ProgressBar } from '@/components/ProgressBar';
 import { colors, fonts, spacing, borderRadius, shadow } from '@/constants/theme';
 import { interestOptions, promptQuestions } from '@/data/profiles';
+import { valuesQuestions, ValuesAnswers, categoryMeta } from '@/data/values';
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 6;
 
 export default function CreateProfileScreen() {
   const router = useRouter();
@@ -33,6 +34,8 @@ export default function CreateProfileScreen() {
   const [selectedPrompt, setSelectedPrompt] = useState(0);
   const [promptAnswer, setPromptAnswer] = useState('');
   const [photos, setPhotos] = useState<string[]>([]);
+  const [valuesAnswers, setValuesAnswers] = useState<ValuesAnswers>({});
+  const [valuesQIndex, setValuesQIndex] = useState(0);
 
   const pickPhoto = useCallback(async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -85,15 +88,15 @@ export default function CreateProfileScreen() {
     );
   };
 
-  const handleNext = () => {
-    if (step < TOTAL_STEPS - 1) {
-      setStep(step + 1);
-    } else {
-      router.replace('/(tabs)');
-    }
-  };
+
 
   const handleBack = () => {
+    if (step === 4) {
+      if (valuesQIndex > 0) {
+        setValuesQIndex(valuesQIndex - 1);
+        return;
+      }
+    }
     if (step > 0) {
       setStep(step - 1);
     } else {
@@ -102,8 +105,38 @@ export default function CreateProfileScreen() {
   };
 
   const canProceed = () => {
-    if (step === 0) return name.trim() && age.trim() && city.trim();
+    if (step === 0) return !!(name.trim() && age.trim() && city.trim());
     return true;
+  };
+
+  const currentQuestion = valuesQuestions[valuesQIndex];
+  const hasAnsweredCurrent = valuesAnswers[currentQuestion?.id] !== undefined;
+  const answeredCount = Object.keys(valuesAnswers).length;
+  const isLastQuestion = valuesQIndex >= valuesQuestions.length - 1;
+
+  const selectAnswer = (questionId: string, value: number) => {
+    setValuesAnswers((prev) => ({ ...prev, [questionId]: value }));
+    setTimeout(() => {
+      if (!isLastQuestion) {
+        setValuesQIndex((prev) => prev + 1);
+      }
+    }, 300);
+  };
+
+  const handleNext = () => {
+    if (step === 4) {
+      if (!isLastQuestion) {
+        setValuesQIndex(valuesQIndex + 1);
+        return;
+      }
+      setStep(5);
+      return;
+    }
+    if (step < TOTAL_STEPS - 1) {
+      setStep(step + 1);
+    } else {
+      router.replace('/(tabs)');
+    }
   };
 
   return (
@@ -298,6 +331,104 @@ export default function CreateProfileScreen() {
 
           {step === 4 && (
             <View>
+              <View style={styles.valuesCategoryRow}>
+                <View style={styles.valuesCategoryBadge}>
+                  {currentQuestion.category === 'intent' && (
+                    <Heart size={14} color={colors.primary[600]} strokeWidth={2} />
+                  )}
+                  {currentQuestion.category === 'communication' && (
+                    <MessageCircle size={14} color={colors.primary[600]} strokeWidth={2} />
+                  )}
+                  {currentQuestion.category === 'values' && (
+                    <Scale size={14} color={colors.primary[600]} strokeWidth={2} />
+                  )}
+                  {currentQuestion.category === 'lifestyle' && (
+                    <Zap size={14} color={colors.primary[600]} strokeWidth={2} />
+                  )}
+                  <Text style={styles.valuesCategoryText}>
+                    {categoryMeta[currentQuestion.category].label}
+                  </Text>
+                </View>
+                <Text style={styles.valuesCounter}>
+                  {valuesQIndex + 1}/{valuesQuestions.length}
+                </Text>
+              </View>
+
+              <Text style={styles.heading}>{currentQuestion.question}</Text>
+              {currentQuestion.helperText && (
+                <Text style={styles.valuesHelperText}>
+                  {currentQuestion.helperText}
+                </Text>
+              )}
+
+              <View style={styles.valuesProgress}>
+                <View style={styles.valuesProgressBar}>
+                  <View
+                    style={[
+                      styles.valuesProgressBarFill,
+                      { width: `${((valuesQIndex + 1) / valuesQuestions.length) * 100}%` },
+                    ]}
+                  />
+                </View>
+                <Text style={styles.valuesAnsweredText}>
+                  {answeredCount} of {valuesQuestions.length} answered
+                </Text>
+              </View>
+
+              <View style={styles.valuesQuestionCard}>
+                {currentQuestion.options.map((opt) => {
+                  const selected = valuesAnswers[currentQuestion.id] === opt.value;
+                  return (
+                    <TouchableOpacity
+                      key={opt.value}
+                      style={[
+                        styles.valuesOption,
+                        selected && styles.valuesOptionSelected,
+                      ]}
+                      activeOpacity={0.7}
+                      onPress={() => selectAnswer(currentQuestion.id, opt.value)}
+                    >
+                      <Text
+                        style={[
+                          styles.valuesOptionText,
+                          selected && styles.valuesOptionTextSelected,
+                        ]}
+                      >
+                        {opt.label}
+                      </Text>
+                      <View
+                        style={[
+                          styles.valuesRadioOuter,
+                          selected && styles.valuesRadioOuterSelected,
+                        ]}
+                      >
+                        {selected && <View style={styles.valuesRadioInner} />}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+
+                {currentQuestion.isDealbreaker && (
+                  <View style={styles.dealbreakerNote}>
+                    <Sparkles size={14} color={colors.accent[600]} strokeWidth={2} />
+                    <Text style={styles.dealbreakerText}>
+                      We prioritize this when filtering your matches
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {!isLastQuestion && hasAnsweredCurrent && (
+                <TouchableOpacity style={styles.autoAdvanceHint} onPress={() => setValuesQIndex(valuesQIndex + 1)}>
+                  <Text style={styles.autoAdvanceHintText}>Next question</Text>
+                  <ChevronRight size={16} color={colors.primary[600]} strokeWidth={2} />
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
+          {step === 5 && (
+            <View>
               <Text style={styles.heading}>Verify yourself</Text>
               <Text style={styles.subheading}>
                 Take a quick selfie so we know you're real. This stays private.
@@ -340,6 +471,12 @@ export default function CreateProfileScreen() {
                   <Text style={styles.summaryLabel}>Photos</Text>
                   <Text style={styles.summaryValue}>{photos.length} added</Text>
                 </View>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Values</Text>
+                  <Text style={styles.summaryValue}>
+                    {Object.keys(valuesAnswers).length}/{valuesQuestions.length} answered
+                  </Text>
+                </View>
               </View>
             </View>
           )}
@@ -347,7 +484,7 @@ export default function CreateProfileScreen() {
 
         <View style={styles.footer}>
           <Button
-            label={step === TOTAL_STEPS - 1 ? 'Start discovering' : 'Continue'}
+            label={step === 4 ? (isLastQuestion ? 'Finish questionnaire' : 'Next question') : step === TOTAL_STEPS - 1 ? 'Start discovering' : 'Continue'}
             onPress={handleNext}
             disabled={!canProceed()}
           />
@@ -621,5 +758,162 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.xl,
     paddingTop: spacing.md,
+  },
+  valuesProgress: {
+    marginBottom: spacing.lg,
+  },
+  valuesProgressText: {
+    fontFamily: fonts.bodyMedium,
+    fontSize: 13,
+    color: colors.neutral[100],
+    marginBottom: spacing.xs,
+  },
+  valuesProgressBar: {
+    height: 4,
+    backgroundColor: colors.neutral[30],
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  valuesProgressBarFill: {
+    height: '100%',
+    backgroundColor: colors.primary[500],
+    borderRadius: 2,
+  },
+  valuesAnsweredText: {
+    fontFamily: fonts.bodyMedium,
+    fontSize: 12,
+    color: colors.neutral[100],
+    marginTop: spacing.xs,
+  },
+  valuesQuestionCard: {
+    backgroundColor: '#fff',
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    ...shadow.sm,
+  },
+  valuesQuestionText: {
+    fontFamily: fonts.heading,
+    fontSize: 18,
+    color: colors.neutral[600],
+    marginBottom: spacing.lg,
+    lineHeight: 26,
+  },
+  valuesOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderWidth: 1.5,
+    borderColor: colors.neutral[40],
+    borderRadius: borderRadius.md,
+    marginBottom: spacing.sm,
+    backgroundColor: colors.neutral[10],
+  },
+  valuesOptionSelected: {
+    borderColor: colors.primary[500],
+    backgroundColor: colors.primary[50],
+  },
+  valuesOptionText: {
+    flex: 1,
+    fontFamily: fonts.bodyMedium,
+    fontSize: 15,
+    color: colors.neutral[400],
+  },
+  valuesOptionTextSelected: {
+    color: colors.primary[700],
+    fontFamily: fonts.bodySemiBold,
+  },
+  valuesRadioOuter: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: colors.neutral[50],
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: spacing.sm,
+  },
+  valuesRadioOuterSelected: {
+    borderColor: colors.primary[500],
+  },
+  valuesRadioInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.primary[500],
+  },
+  valuesCheck: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.primary[500],
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: spacing.sm,
+  },
+  valuesCategoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
+  valuesCategoryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.primary[50],
+    paddingVertical: spacing.xs + 1,
+    paddingHorizontal: spacing.sm + 2,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    borderColor: colors.primary[100],
+  },
+  valuesCategoryText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 12,
+    color: colors.primary[700],
+  },
+  valuesCounter: {
+    fontFamily: fonts.bodyBold,
+    fontSize: 14,
+    color: colors.neutral[100],
+  },
+  valuesHelperText: {
+    fontFamily: fonts.body,
+    fontSize: 14,
+    color: colors.neutral[200],
+    lineHeight: 20,
+    marginBottom: spacing.md,
+  },
+  dealbreakerNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+    backgroundColor: colors.accent[50],
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.md,
+  },
+  dealbreakerText: {
+    flex: 1,
+    fontFamily: fonts.bodyMedium,
+    fontSize: 12,
+    color: colors.accent[700],
+    lineHeight: 17,
+  },
+  autoAdvanceHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.lg,
+    paddingVertical: spacing.sm,
+  },
+  autoAdvanceHintText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 14,
+    color: colors.primary[600],
   },
 });

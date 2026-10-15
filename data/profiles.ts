@@ -1,3 +1,5 @@
+import { ValuesAnswers } from './values';
+
 export type Profile = {
   id: string;
   name: string;
@@ -13,6 +15,20 @@ export type Profile = {
   verified: boolean;
   distance: number;
   compatibility: number;
+  valuesAnswers: ValuesAnswers;
+};
+
+export const myValuesAnswers: ValuesAnswers = {
+  intent: 2,
+  timeline: 2,
+  communication: 1,
+  attachment: 1,
+  family: 2,
+  faith: 2,
+  ambition: 1,
+  pace: 1,
+  social: 2,
+  dealbreaker: 1,
 };
 
 export const interestOptions = [
@@ -69,6 +85,7 @@ export const discoverProfiles: Profile[] = [
     verified: true,
     distance: 3,
     compatibility: 94,
+    valuesAnswers: { intent: 2, timeline: 2, communication: 1, attachment: 1, family: 2, faith: 2, ambition: 1, pace: 1, social: 2, dealbreaker: 1 },
   },
   {
     id: '2',
@@ -88,6 +105,7 @@ export const discoverProfiles: Profile[] = [
     verified: true,
     distance: 12,
     compatibility: 88,
+    valuesAnswers: { intent: 2, timeline: 3, communication: 0, attachment: 2, family: 3, faith: 2, ambition: 2, pace: 2, social: 1, dealbreaker: 2 },
   },
   {
     id: '3',
@@ -107,6 +125,7 @@ export const discoverProfiles: Profile[] = [
     verified: true,
     distance: 8,
     compatibility: 91,
+    valuesAnswers: { intent: 1, timeline: 1, communication: 1, attachment: 3, family: 1, faith: 1, ambition: 2, pace: 2, social: 3, dealbreaker: 0 },
   },
   {
     id: '4',
@@ -126,6 +145,7 @@ export const discoverProfiles: Profile[] = [
     verified: true,
     distance: 5,
     compatibility: 86,
+    valuesAnswers: { intent: 3, timeline: 3, communication: 3, attachment: 0, family: 3, faith: 3, ambition: 0, pace: 0, social: 1, dealbreaker: 3 },
   },
   {
     id: '5',
@@ -145,6 +165,7 @@ export const discoverProfiles: Profile[] = [
     verified: true,
     distance: 6,
     compatibility: 89,
+    valuesAnswers: { intent: 3, timeline: 2, communication: 2, attachment: 1, family: 3, faith: 3, ambition: 1, pace: 0, social: 1, dealbreaker: 1 },
   },
   {
     id: '6',
@@ -164,6 +185,7 @@ export const discoverProfiles: Profile[] = [
     verified: true,
     distance: 15,
     compatibility: 83,
+    valuesAnswers: { intent: 1, timeline: 1, communication: 0, attachment: 2, family: 1, faith: 1, ambition: 3, pace: 3, social: 3, dealbreaker: 0 },
   },
 ];
 
@@ -183,6 +205,7 @@ export const matchProfiles: Profile[] = [
     verified: true,
     distance: 3,
     compatibility: 94,
+    valuesAnswers: { intent: 2, timeline: 2, communication: 1, attachment: 1, family: 2, faith: 2, ambition: 1, pace: 1, social: 2, dealbreaker: 1 },
   },
   {
     id: 'm2',
@@ -199,6 +222,7 @@ export const matchProfiles: Profile[] = [
     verified: true,
     distance: 12,
     compatibility: 88,
+    valuesAnswers: { intent: 2, timeline: 3, communication: 0, attachment: 2, family: 3, faith: 2, ambition: 2, pace: 2, social: 1, dealbreaker: 2 },
   },
   {
     id: 'm3',
@@ -215,6 +239,7 @@ export const matchProfiles: Profile[] = [
     verified: true,
     distance: 8,
     compatibility: 91,
+    valuesAnswers: { intent: 1, timeline: 1, communication: 1, attachment: 3, family: 1, faith: 1, ambition: 2, pace: 2, social: 3, dealbreaker: 0 },
   },
 ];
 

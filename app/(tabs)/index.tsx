@@ -25,7 +25,9 @@ import {
   Check,
 } from 'lucide-react-native';
 import { colors, fonts, spacing, borderRadius, shadow } from '@/constants/theme';
-import { discoverProfiles, Profile } from '@/data/profiles';
+import { discoverProfiles, Profile, myValuesAnswers } from '@/data/profiles';
+import { calculateCompatibility } from '@/data/values';
+import { CompatibilityBreakdownCard } from '@/components/CompatibilityBreakdownCard';
 
 const { width, height } = Dimensions.get('window');
 const CARD_HEIGHT = height * 0.62;
@@ -450,6 +452,13 @@ export default function DiscoverScreen() {
                     {detailProfile.compatibility}% compatible with you
                   </Text>
                 </View>
+              </View>
+
+              <View style={styles.detailBreakdownWrap}>
+                <CompatibilityBreakdownCard
+                  breakdown={calculateCompatibility(myValuesAnswers, detailProfile.valuesAnswers)}
+                  matchName={detailProfile.name}
+                />
               </View>
 
               <View style={styles.detailInfoRow}>
@@ -1022,6 +1031,9 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodySemiBold,
     fontSize: 14,
     color: colors.primary[700],
+  },
+  detailBreakdownWrap: {
+    marginTop: spacing.md,
   },
   detailInfoRow: {
     flexDirection: 'row',
