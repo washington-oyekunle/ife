@@ -21,6 +21,8 @@ import {
   Briefcase,
   GraduationCap,
   Sparkles,
+  SlidersHorizontal,
+  Check,
 } from 'lucide-react-native';
 import { colors, fonts, spacing, borderRadius, shadow } from '@/constants/theme';
 import { discoverProfiles, Profile } from '@/data/profiles';
@@ -32,10 +34,20 @@ export default function DiscoverScreen() {
   const [profiles, setProfiles] = useState(discoverProfiles);
   const [detailProfile, setDetailProfile] = useState<Profile | null>(null);
   const [likedIds, setLikedIds] = useState<string[]>([]);
+  const [superLikedIds, setSuperLikedIds] = useState<string[]>([]);
+  const [matchedProfile, setMatchedProfile] = useState<Profile | null>(null);
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const [photoIndices, setPhotoIndices] = useState<Record<string, number>>({});
+  const [showFilters, setShowFilters] = useState(false);
+  const [maxDistance, setMaxDistance] = useState(50);
+  const [minAge, setMinAge] = useState(18);
+  const [maxAge, setMaxAge] = useState(45);
+  const [appliedDistance, setAppliedDistance] = useState(50);
+  const [appliedMinAge, setAppliedMinAge] = useState(18);
+  const [appliedMaxAge, setAppliedMaxAge] = useState(45);
 
-  const handleAction = (action: 'pass' | 'like') => {
+  const handleAction = (action: 'pass' | 'like' | 'superlike') => {
+    if (profiles.length === 0) return;
     Animated.timing(fadeAnim, {
       toValue: 0,
       duration: 200,
@@ -43,6 +55,12 @@ export default function DiscoverScreen() {
     }).start(() => {
       if (action === 'like') {
         setLikedIds((prev) => [...prev, profiles[0].id]);
+        if (profiles[0].compatibility >= 85) {
+          setMatchedProfile(profiles[0]);
+        }
+      } else if (action === 'superlike') {
+        setSuperLikedIds((prev) => [...prev, profiles[0].id]);
+        setMatchedProfile(profiles[0]);
       }
       setProfiles((prev) => prev.slice(1));
       fadeAnim.setValue(1);
@@ -55,6 +73,13 @@ export default function DiscoverScreen() {
   const getPhotoIndex = (id: string) => photoIndices[id] ?? 0;
   const setPhotoIndex = (id: string, idx: number) =>
     setPhotoIndices((prev) => ({ ...prev, [id]: idx }));
+
+  const applyFilters = () => {
+    setAppliedDistance(maxDistance);
+    setAppliedMinAge(minAge);
+    setAppliedMaxAge(maxAge);
+    setShowFilters(false);
+  };
 
   const renderCard = (profile: Profile, isTop: boolean) => {
     if (!profile) return <View style={styles.emptyCard} />;
@@ -169,10 +194,13 @@ export default function DiscoverScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.topBar}>
         <Text style={styles.logo}>ife</Text>
-        <View style={styles.filterPill}>
-          <Sparkles size={16} color={colors.primary[600]} strokeWidth={2} />
-          <Text style={styles.filterText}>For you</Text>
-        </View>
+        <TouchableOpacity
+          style={styles.filterPill}
+          onPress={() => setShowFilters(true)}
+        >
+          <SlidersHorizontal size={16} color={colors.primary[600]} strokeWidth={2} />
+          <Text style={styles.filterText}>Filters</Text>
+        </TouchableOpacity>
       </View>
 
       {profiles.length === 0 ? (
@@ -182,6 +210,16 @@ export default function DiscoverScreen() {
           <Text style={styles.emptyText}>
             Check back later for more people in your area.
           </Text>
+          <TouchableOpacity
+            style={styles.resetBtn}
+            onPress={() => {
+              setProfiles(discoverProfiles);
+              setLikedIds([]);
+              setSuperLikedIds([]);
+            }}
+          >
+            <Text style={styles.resetBtnText}>Discover again</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <View style={styles.cardStack}>
@@ -204,6 +242,7 @@ export default function DiscoverScreen() {
           <TouchableOpacity
             style={styles.superLikeBtn}
             activeOpacity={0.85}
+            onPress={() => handleAction('superlike')}
           >
             <Star size={24} color={colors.accent[500]} strokeWidth={2} fill={colors.accent[100]} />
           </TouchableOpacity>
@@ -217,6 +256,160 @@ export default function DiscoverScreen() {
         </View>
       )}
 
+      {/* Match notification */}
+      <Modal
+        visible={!!matchedProfile}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setMatchedProfile(null)}
+      >
+        <View style={styles.matchOverlay}>
+          <View style={styles.matchCard}>
+            <View style={styles.matchIconCircle}>
+              <Heart size={40} color="#fff" strokeWidth={2.5} fill="#fff" />
+            </View>
+            <Text style={styles.matchTitle}>It's a match!</Text>
+            <Text style={styles.matchSubtitle}>
+              You and {matchedProfile?.name} liked each other
+            </Text>
+            <Image
+              source={{ uri: matchedProfile?.photos[0] }}
+              style={styles.matchPhoto}
+            />
+            <View style={styles.matchActions}>
+              <TouchableOpacity
+                style={styles.matchKeepSwiping}
+                onPress={() => setMatchedProfile(null)}
+              >
+                <Text style={styles.matchKeepSwipingText}>Keep swiping</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.matchSayHi}
+                onPress={() => {
+                  setMatchedProfile(null);
+                  setDetailProfile(null);
+                }}
+              >
+                <Text style={styles.matchSayHiText}>Say hi</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Filters modal */}
+      <Modal
+        visible={showFilters}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowFilters(false)}
+      >
+        <View style={styles.filterOverlay}>
+          <View style={styles.filterSheet}>
+            <View style={styles.filterHeader}>
+              <Text style={styles.filterTitle}>Filters</Text>
+              <TouchableOpacity onPress={() => setShowFilters(false)}>
+                <X size={24} color={colors.neutral[400]} strokeWidth={2} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.filterGroup}>
+              <Text style={styles.filterLabel}>
+                Maximum distance: {maxDistance}km
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {[10, 25, 50, 100, 200].map((dist) => (
+                  <TouchableOpacity
+                    key={dist}
+                    style={[
+                      styles.filterChip,
+                      maxDistance === dist && styles.filterChipActive,
+                    ]}
+                    onPress={() => setMaxDistance(dist)}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        maxDistance === dist && styles.filterChipTextActive,
+                      ]}
+                    >
+                      {dist}km
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+
+            <View style={styles.filterGroup}>
+              <Text style={styles.filterLabel}>Age range: {minAge} - {maxAge}</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {[18, 22, 25, 30, 35, 40, 45].map((a) => (
+                  <TouchableOpacity
+                    key={a}
+                    style={[
+                      styles.filterChip,
+                      minAge === a && styles.filterChipActive,
+                    ]}
+                    onPress={() => setMinAge(a)}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        minAge === a && styles.filterChipTextActive,
+                      ]}
+                    >
+                      {a}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: spacing.sm }}>
+                {[25, 30, 35, 40, 45, 50, 55].map((a) => (
+                  <TouchableOpacity
+                    key={a}
+                    style={[
+                      styles.filterChip,
+                      maxAge === a && styles.filterChipActive,
+                    ]}
+                    onPress={() => setMaxAge(a)}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        maxAge === a && styles.filterChipTextActive,
+                      ]}
+                    >
+                      {a}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+
+            <View style={styles.filterApplied}>
+              {appliedDistance !== 50 && (
+                <View style={styles.appliedPill}>
+                  <Text style={styles.appliedPillText}>{appliedDistance}km</Text>
+                </View>
+              )}
+              {(appliedMinAge !== 18 || appliedMaxAge !== 45) && (
+                <View style={styles.appliedPill}>
+                  <Text style={styles.appliedPillText}>
+                    {appliedMinAge}-{appliedMaxAge}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            <TouchableOpacity style={styles.applyBtn} onPress={applyFilters}>
+              <Check size={20} color="#fff" strokeWidth={2.5} />
+              <Text style={styles.applyBtnText}>Apply filters</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Detail modal */}
       <Modal
         visible={!!detailProfile}
         animationType="slide"
@@ -313,6 +506,15 @@ export default function DiscoverScreen() {
                   }}
                 >
                   <X size={26} color={colors.error[500]} strokeWidth={2.5} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.detailSuperLikeBtn}
+                  onPress={() => {
+                    setDetailProfile(null);
+                    handleAction('superlike');
+                  }}
+                >
+                  <Star size={24} color={colors.accent[500]} strokeWidth={2} fill={colors.accent[100]} />
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.detailLikeBtn}
@@ -591,6 +793,173 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: spacing.xs,
   },
+  resetBtn: {
+    marginTop: spacing.lg,
+    backgroundColor: colors.primary[500],
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xl,
+    borderRadius: borderRadius.full,
+  },
+  resetBtnText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 15,
+    color: '#fff',
+  },
+  // Match overlay
+  matchOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  matchCard: {
+    backgroundColor: '#fff',
+    borderRadius: borderRadius.xl,
+    padding: spacing.xxl,
+    alignItems: 'center',
+    width: width - 64,
+    ...shadow.lg,
+  },
+  matchIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: colors.primary[500],
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
+  },
+  matchTitle: {
+    fontFamily: fonts.headingBold,
+    fontSize: 28,
+    color: colors.primary[600],
+  },
+  matchSubtitle: {
+    fontFamily: fonts.body,
+    fontSize: 15,
+    color: colors.neutral[200],
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
+  matchPhoto: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    marginTop: spacing.lg,
+    resizeMode: 'cover',
+  },
+  matchActions: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginTop: spacing.xl,
+  },
+  matchKeepSwiping: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.neutral[20],
+  },
+  matchKeepSwipingText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 15,
+    color: colors.neutral[400],
+  },
+  matchSayHi: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xl,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.primary[500],
+  },
+  matchSayHiText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 15,
+    color: '#fff',
+  },
+  // Filter modal
+  filterOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  filterSheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: borderRadius.xl,
+    borderTopRightRadius: borderRadius.xl,
+    padding: spacing.xl,
+    paddingBottom: spacing.xxxl,
+  },
+  filterHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xl,
+  },
+  filterTitle: {
+    fontFamily: fonts.headingBold,
+    fontSize: 24,
+    color: colors.neutral[600],
+  },
+  filterGroup: {
+    marginBottom: spacing.xl,
+  },
+  filterLabel: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 15,
+    color: colors.neutral[500],
+    marginBottom: spacing.sm,
+  },
+  filterChip: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.neutral[20],
+    marginRight: spacing.sm,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+  },
+  filterChipActive: {
+    backgroundColor: colors.primary[50],
+    borderColor: colors.primary[500],
+  },
+  filterChipText: {
+    fontFamily: fonts.bodyMedium,
+    fontSize: 14,
+    color: colors.neutral[300],
+  },
+  filterChipTextActive: {
+    color: colors.primary[700],
+    fontFamily: fonts.bodySemiBold,
+  },
+  filterApplied: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  appliedPill: {
+    backgroundColor: colors.primary[100],
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.full,
+  },
+  appliedPillText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 13,
+    color: colors.primary[700],
+  },
+  applyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.primary[500],
+    paddingVertical: spacing.lg,
+    borderRadius: borderRadius.full,
+  },
+  applyBtnText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 16,
+    color: '#fff',
+  },
   // Detail modal
   detailScroll: {
     flex: 1,
@@ -728,7 +1097,7 @@ const styles = StyleSheet.create({
   detailActions: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: spacing.xl,
+    gap: spacing.lg,
     marginTop: spacing.xxl,
   },
   detailPassBtn: {
@@ -740,6 +1109,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1.5,
     borderColor: colors.error[100],
+    ...shadow.md,
+  },
+  detailSuperLikeBtn: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.neutral[30],
     ...shadow.md,
   },
   detailLikeBtn: {

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,8 +6,11 @@ import {
   ScrollView,
   Image,
   TouchableOpacity,
+  TextInput,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
 import {
   Settings,
   BadgeCheck,
@@ -20,29 +23,79 @@ import {
   Bell,
   HelpCircle,
   LogOut,
+  Check,
+  X,
+  Plus,
 } from 'lucide-react-native';
 import { colors, fonts, spacing, borderRadius, shadow } from '@/constants/theme';
+import { interestOptions } from '@/data/profiles';
 
 export default function ProfileScreen() {
+  const [avatarUri, setAvatarUri] = useState(
+    'https://images.pexels.com/photos/37038761/pexels-photo-37038761.jpeg?auto=compress&cs=tinysrgb&h=400&w=400'
+  );
+  const [editing, setEditing] = useState(false);
+  const [bio, setBio] = useState(
+    'Designer by day, jollof critic by night. I love old soul music, weekend markets, and conversations that go deep quickly.'
+  );
+  const [interests, setInterests] = useState(['Art', 'Music', 'Cooking', 'Travel', 'Fashion']);
+  const [promptAnswer, setPromptAnswer] = useState(
+    "Jollof at my mom's, a gallery opening, and dancing to Fela until midnight."
+  );
+
+  const pickAvatar = useCallback(async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission needed', 'Please allow photo access to change your picture.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: 'images',
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets.length > 0) {
+      setAvatarUri(result.assets[0].uri);
+    }
+  }, []);
+
+  const toggleInterest = (interest: string) => {
+    setInterests((prev) =>
+      prev.includes(interest)
+        ? prev.filter((i) => i !== interest)
+        : prev.length < 8
+          ? [...prev, interest]
+          : prev
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Text style={styles.title}>Profile</Text>
-          <TouchableOpacity style={styles.settingsBtn}>
-            <Settings size={22} color={colors.neutral[400]} strokeWidth={2} />
-          </TouchableOpacity>
+          {editing ? (
+            <TouchableOpacity
+              style={styles.saveBtn}
+              onPress={() => setEditing(false)}
+            >
+              <Check size={20} color={colors.secondary[600]} strokeWidth={2.5} />
+              <Text style={styles.saveBtnText}>Save</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity style={styles.settingsBtn}>
+              <Settings size={22} color={colors.neutral[400]} strokeWidth={2} />
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.profileCard}>
           <View style={styles.avatarContainer}>
-            <Image
-              source={{
-                uri: 'https://images.pexels.com/photos/37038761/pexels-photo-37038761.jpeg?auto=compress&cs=tinysrgb&h=400&w=400',
-              }}
-              style={styles.avatar}
-            />
-            <TouchableOpacity style={styles.editAvatarBtn}>
+            <Image source={{ uri: avatarUri }} style={styles.avatar} />
+            <TouchableOpacity style={styles.editAvatarBtn} onPress={pickAvatar}>
               <Camera size={16} color="#fff" strokeWidth={2} />
             </TouchableOpacity>
           </View>
@@ -87,35 +140,84 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>About me</Text>
-            <TouchableOpacity style={styles.editBtn}>
-              <Edit3 size={15} color={colors.primary[600]} strokeWidth={2} />
-              <Text style={styles.editText}>Edit</Text>
-            </TouchableOpacity>
+            {editing ? (
+              <TouchableOpacity style={styles.cancelEditBtn} onPress={() => setEditing(false)}>
+                <X size={15} color={colors.error[500]} strokeWidth={2} />
+                <Text style={styles.cancelEditText}>Cancel</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={styles.editBtn} onPress={() => setEditing(true)}>
+                <Edit3 size={15} color={colors.primary[600]} strokeWidth={2} />
+                <Text style={styles.editText}>Edit</Text>
+              </TouchableOpacity>
+            )}
           </View>
-          <Text style={styles.bio}>
-            Designer by day, jollof critic by night. I love old soul music,
-            weekend markets, and conversations that go deep quickly.
-          </Text>
+          {editing ? (
+            <TextInput
+              style={[styles.bio, styles.bioInput]}
+              value={bio}
+              onChangeText={setBio}
+              multiline
+              textAlignVertical="top"
+              maxLength={300}
+              autoFocus
+            />
+          ) : (
+            <Text style={styles.bio}>{bio}</Text>
+          )}
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Interests</Text>
-          <View style={styles.interestsContainer}>
-            {['Art', 'Music', 'Cooking', 'Travel', 'Fashion'].map((interest) => (
-              <View key={interest} style={styles.interestTag}>
-                <Text style={styles.interestText}>{interest}</Text>
-              </View>
-            ))}
-          </View>
+          {editing ? (
+            <View style={styles.interestsEditContainer}>
+              {interestOptions.map((interest) => {
+                const selected = interests.includes(interest);
+                return (
+                  <TouchableOpacity
+                    key={interest}
+                    style={[styles.interestTagEdit, selected && styles.interestTagEditSelected]}
+                    onPress={() => toggleInterest(interest)}
+                  >
+                    <Text
+                      style={[
+                        styles.interestTextEdit,
+                        selected && styles.interestTextEditSelected,
+                      ]}
+                    >
+                      {interest}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ) : (
+            <View style={styles.interestsContainer}>
+              {interests.map((interest) => (
+                <View key={interest} style={styles.interestTag}>
+                  <Text style={styles.interestText}>{interest}</Text>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Prompts</Text>
           <View style={styles.promptCard}>
             <Text style={styles.promptQ}>My ideal weekend looks like...</Text>
-            <Text style={styles.promptA}>
-              Jollof at my mom's, a gallery opening, and dancing to Fela until midnight.
-            </Text>
+            {editing ? (
+              <TextInput
+                style={[styles.promptA, styles.promptInput]}
+                value={promptAnswer}
+                onChangeText={setPromptAnswer}
+                multiline
+                textAlignVertical="top"
+                maxLength={200}
+              />
+            ) : (
+              <Text style={styles.promptA}>{promptAnswer}</Text>
+            )}
           </View>
         </View>
 
@@ -182,6 +284,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...shadow.sm,
+  },
+  saveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.secondary[50],
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.full,
+  },
+  saveBtnText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 14,
+    color: colors.secondary[600],
   },
   profileCard: {
     alignItems: 'center',
@@ -319,16 +435,39 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.primary[600],
   },
+  cancelEditBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  cancelEditText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 14,
+    color: colors.error[500],
+  },
   bio: {
     fontFamily: fonts.body,
     fontSize: 15,
     color: colors.neutral[400],
     lineHeight: 23,
   },
+  bioInput: {
+    borderWidth: 1,
+    borderColor: colors.primary[200],
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    backgroundColor: '#fff',
+    minHeight: 100,
+  },
   interestsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
+  },
+  interestsEditContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
   },
   interestTag: {
     backgroundColor: colors.primary[50],
@@ -342,6 +481,27 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodySemiBold,
     fontSize: 14,
     color: colors.primary[700],
+  },
+  interestTagEdit: {
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.neutral[20],
+    borderWidth: 1.5,
+    borderColor: colors.neutral[40],
+  },
+  interestTagEditSelected: {
+    backgroundColor: colors.primary[50],
+    borderColor: colors.primary[500],
+  },
+  interestTextEdit: {
+    fontFamily: fonts.bodyMedium,
+    fontSize: 14,
+    color: colors.neutral[400],
+  },
+  interestTextEditSelected: {
+    color: colors.primary[700],
+    fontFamily: fonts.bodySemiBold,
   },
   promptCard: {
     backgroundColor: '#fff',
@@ -360,6 +520,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.neutral[400],
     lineHeight: 23,
+  },
+  promptInput: {
+    borderWidth: 1,
+    borderColor: colors.primary[200],
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    backgroundColor: colors.neutral[10],
+    minHeight: 80,
   },
   settingsSection: {
     backgroundColor: '#fff',

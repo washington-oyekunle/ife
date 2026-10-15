@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,11 +6,14 @@ import {
   ScrollView,
   TextInput,
   TouchableOpacity,
+  Image,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, Stack } from 'expo-router';
-import { ChevronLeft, Camera, Check, ImagePlus } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { ChevronLeft, Camera, Check, ImagePlus, X } from 'lucide-react-native';
 import { Button } from '@/components/Button';
 import { Chip } from '@/components/Chip';
 import { ProgressBar } from '@/components/ProgressBar';
@@ -29,6 +32,48 @@ export default function CreateProfileScreen() {
   const [interests, setInterests] = useState<string[]>([]);
   const [selectedPrompt, setSelectedPrompt] = useState(0);
   const [promptAnswer, setPromptAnswer] = useState('');
+  const [photos, setPhotos] = useState<string[]>([]);
+
+  const pickPhoto = useCallback(async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission needed', 'Please allow photo access to upload.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: 'images',
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets.length > 0 && photos.length < 4) {
+      setPhotos((prev) => [...prev, result.assets[0].uri]);
+    }
+  }, [photos.length]);
+
+  const takeSelfie = useCallback(async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission needed', 'Please allow camera access to take a selfie.');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets.length > 0) {
+      Alert.alert('Verified!', 'Your selfie has been captured for verification.');
+    }
+  }, []);
+
+  const removePhoto = (index: number) => {
+    setPhotos((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const toggleInterest = (interest: string) => {
     setInterests((prev) =>
@@ -54,6 +99,11 @@ export default function CreateProfileScreen() {
     } else {
       router.back();
     }
+  };
+
+  const canProceed = () => {
+    if (step === 0) return name.trim() && age.trim() && city.trim();
+    return true;
   };
 
   return (
@@ -88,16 +138,41 @@ export default function CreateProfileScreen() {
                 Tell us a bit about who you are.
               </Text>
 
-              <View style={styles.photoUploader}>
-                <View style={styles.mainPhoto}>
-                  <Camera size={32} color={colors.neutral[100]} strokeWidth={1.5} />
-                </View>
-                <TouchableOpacity style={styles.addPhotoBtn}>
-                  <ImagePlus size={20} color={colors.primary[500]} strokeWidth={2} />
-                </TouchableOpacity>
+              <View style={styles.photoRow}>
+                {photos.length > 0 ? (
+                  <View style={styles.photoGrid}>
+                    {photos.map((uri, i) => (
+                      <View key={i} style={styles.photoSlot}>
+                        <Image source={{ uri }} style={styles.photoImg} />
+                        <TouchableOpacity
+                          style={styles.photoRemove}
+                          onPress={() => removePhoto(i)}
+                        >
+                          <X size={14} color="#fff" strokeWidth={3} />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                    {photos.length < 4 && (
+                      <TouchableOpacity style={styles.addPhotoSlot} onPress={pickPhoto}>
+                        <ImagePlus size={22} color={colors.primary[500]} strokeWidth={2} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ) : (
+                  <View style={styles.photoUploader}>
+                    <TouchableOpacity style={styles.mainPhoto} onPress={pickPhoto}>
+                      <Camera size={32} color={colors.neutral[100]} strokeWidth={1.5} />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.addPhotoBtn} onPress={pickPhoto}>
+                      <ImagePlus size={20} color={colors.primary[500]} strokeWidth={2} />
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
               <Text style={styles.hint}>
-                Add at least 2 photos. A clear face photo works best.
+                {photos.length > 0
+                  ? `${photos.length}/4 photos added`
+                  : 'Add at least 2 photos. A clear face photo works best.'}
               </Text>
 
               <Text style={styles.inputLabel}>Your name</Text>
@@ -235,7 +310,7 @@ export default function CreateProfileScreen() {
                   Tap to take a selfie. We'll compare it to your photos to confirm
                   it's really you.
                 </Text>
-                <TouchableOpacity style={styles.verifyBtn}>
+                <TouchableOpacity style={styles.verifyBtn} onPress={takeSelfie}>
                   <Text style={styles.verifyBtnText}>Take selfie</Text>
                 </TouchableOpacity>
                 <Text style={styles.hint}>
@@ -261,6 +336,10 @@ export default function CreateProfileScreen() {
                   <Text style={styles.summaryLabel}>Interests</Text>
                   <Text style={styles.summaryValue}>{interests.length} selected</Text>
                 </View>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Photos</Text>
+                  <Text style={styles.summaryValue}>{photos.length} added</Text>
+                </View>
               </View>
             </View>
           )}
@@ -270,7 +349,7 @@ export default function CreateProfileScreen() {
           <Button
             label={step === TOTAL_STEPS - 1 ? 'Start discovering' : 'Continue'}
             onPress={handleNext}
-            disabled={step === 0 && (!name || !age || !city)}
+            disabled={!canProceed()}
           />
         </View>
       </SafeAreaView>
@@ -356,6 +435,48 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary[50],
     borderWidth: 1.5,
     borderColor: colors.primary[200],
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoRow: {
+    marginBottom: spacing.sm,
+  },
+  photoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  photoSlot: {
+    width: 80,
+    height: 80,
+    borderRadius: borderRadius.md,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  photoImg: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  photoRemove: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addPhotoSlot: {
+    width: 80,
+    height: 80,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.primary[50],
+    borderWidth: 1.5,
+    borderColor: colors.primary[200],
+    borderStyle: 'dashed',
     alignItems: 'center',
     justifyContent: 'center',
   },

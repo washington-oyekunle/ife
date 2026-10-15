@@ -11,7 +11,7 @@ import {
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Send, BadgeCheck } from 'lucide-react-native';
+import { ChevronLeft, Send, BadgeCheck, Search, X } from 'lucide-react-native';
 import { colors, fonts, spacing, borderRadius, shadow } from '@/constants/theme';
 import { conversations, Conversation, Message } from '@/data/profiles';
 
@@ -19,6 +19,11 @@ export default function ChatsScreen() {
   const [activeConv, setActiveConv] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Conversation[]>(conversations);
   const [inputText, setInputText] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredMessages = messages.filter((c) =>
+    c.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const sendMessage = () => {
     if (!inputText.trim() || !activeConv) return;
@@ -133,42 +138,74 @@ export default function ChatsScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>Chats</Text>
       </View>
-      <FlatList
-        data={messages}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.convItem}
-            activeOpacity={0.7}
-            onPress={() => setActiveConv(item)}
-          >
-            <Image source={{ uri: item.photo }} style={styles.convAvatar} />
-            <View style={styles.convInfo}>
-              <View style={styles.convHeader}>
-                <View style={styles.convNameRow}>
-                  <Text style={styles.convName}>{item.name}</Text>
-                  <BadgeCheck size={14} color={colors.secondary[500]} strokeWidth={2} />
-                </View>
-                <Text style={styles.convTime}>{item.lastMessageTime}</Text>
-              </View>
-              <View style={styles.convBottom}>
-                <Text
-                  style={styles.convPreview}
-                  numberOfLines={1}
-                >
-                  {item.lastMessage}
-                </Text>
-                {item.unread > 0 && (
-                  <View style={styles.unreadBadge}>
-                    <Text style={styles.unreadText}>{item.unread}</Text>
-                  </View>
-                )}
-              </View>
-            </View>
+
+      <View style={styles.searchContainer}>
+        <Search size={18} color={colors.neutral[100]} strokeWidth={2} />
+        <TextInput
+          style={styles.searchInput}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Search conversations..."
+          placeholderTextColor={colors.neutral[100]}
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')}>
+            <X size={16} color={colors.neutral[100]} strokeWidth={2} />
           </TouchableOpacity>
         )}
-      />
+      </View>
+
+      {filteredMessages.length === 0 ? (
+        <View style={styles.emptyChats}>
+          <Text style={styles.emptyChatsTitle}>No conversations found</Text>
+          <Text style={styles.emptyChatsText}>
+            {searchQuery ? 'Try a different search.' : 'Your matches will appear here.'}
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredMessages}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.list}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.convItem}
+              activeOpacity={0.7}
+              onPress={() => setActiveConv(item)}
+            >
+              <View style={styles.avatarWrap}>
+                <Image source={{ uri: item.photo }} style={styles.convAvatar} />
+                <View style={styles.onlineDot} />
+              </View>
+              <View style={styles.convInfo}>
+                <View style={styles.convHeader}>
+                  <View style={styles.convNameRow}>
+                    <Text style={styles.convName}>{item.name}</Text>
+                    <BadgeCheck size={14} color={colors.secondary[500]} strokeWidth={2} />
+                  </View>
+                  <Text style={styles.convTime}>{item.lastMessageTime}</Text>
+                </View>
+                <View style={styles.convBottom}>
+                  <Text
+                    style={[
+                      styles.convPreview,
+                      item.unread > 0 && styles.convPreviewUnread,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {item.lastMessage}
+                  </Text>
+                  {item.unread > 0 && (
+                    <View style={styles.unreadBadge}>
+                      <Text style={styles.unreadText}>{item.unread}</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            </TouchableOpacity>
+          )}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -188,6 +225,42 @@ const styles = StyleSheet.create({
     fontSize: 28,
     color: colors.neutral[600],
   },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    backgroundColor: colors.neutral[10],
+    borderRadius: borderRadius.full,
+    gap: spacing.sm,
+  },
+  searchInput: {
+    flex: 1,
+    fontFamily: fonts.body,
+    fontSize: 15,
+    color: colors.neutral[500],
+    paddingVertical: 0,
+  },
+  emptyChats: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+  },
+  emptyChatsTitle: {
+    fontFamily: fonts.heading,
+    fontSize: 18,
+    color: colors.neutral[300],
+  },
+  emptyChatsText: {
+    fontFamily: fonts.body,
+    fontSize: 14,
+    color: colors.neutral[100],
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
   list: {
     paddingHorizontal: spacing.lg,
   },
@@ -199,11 +272,25 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.neutral[20],
   },
+  avatarWrap: {
+    position: 'relative',
+  },
   convAvatar: {
     width: 56,
     height: 56,
     borderRadius: 28,
     resizeMode: 'cover',
+  },
+  onlineDot: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: colors.secondary[500],
+    borderWidth: 2.5,
+    borderColor: '#fff',
   },
   convInfo: {
     flex: 1,
@@ -239,6 +326,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.neutral[200],
     flex: 1,
+  },
+  convPreviewUnread: {
+    color: colors.neutral[400],
+    fontFamily: fonts.bodySemiBold,
   },
   unreadBadge: {
     minWidth: 20,
