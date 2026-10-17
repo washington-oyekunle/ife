@@ -20,6 +20,7 @@ import { ProgressBar } from '@/components/ProgressBar';
 import { colors, fonts, spacing, borderRadius, shadow } from '@/constants/theme';
 import { interestOptions, promptQuestions } from '@/data/profiles';
 import { valuesQuestions, ValuesAnswers, categoryMeta } from '@/data/values';
+import { createProfile, updateProfile, uploadProfilePhoto } from '@/lib/api';
 
 const TOTAL_STEPS = 6;
 
@@ -36,6 +37,8 @@ export default function CreateProfileScreen() {
   const [photos, setPhotos] = useState<string[]>([]);
   const [valuesAnswers, setValuesAnswers] = useState<ValuesAnswers>({});
   const [valuesQIndex, setValuesQIndex] = useState(0);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const pickPhoto = useCallback(async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -123,7 +126,7 @@ export default function CreateProfileScreen() {
     }, 300);
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (step === 4) {
       if (!isLastQuestion) {
         setValuesQIndex(valuesQIndex + 1);
@@ -134,8 +137,38 @@ export default function CreateProfileScreen() {
     }
     if (step < TOTAL_STEPS - 1) {
       setStep(step + 1);
-    } else {
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      const profile = await createProfile({
+        name: name.trim(),
+        age: Number(age),
+        city: city.trim(),
+        photos: [],
+        interests,
+        prompts: [{
+          question: promptQuestions[selectedPrompt],
+          answer: promptAnswer.trim(),
+        }],
+        bio: bio.trim(),
+        valuesAnswers,
+        verified: false,
+      });
+
+      const uploadedPhotos = await Promise.all(
+        photos.map((uri) => uploadProfilePhoto(uri, profile.id))
+      );
+      if (uploadedPhotos.length > 0) {
+        await updateProfile(profile.id, { photos: uploadedPhotos });
+      }
       router.replace('/(tabs)');
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'We could not save your profile. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -483,10 +516,13 @@ export default function CreateProfileScreen() {
         </ScrollView>
 
         <View style={styles.footer}>
+          {saveError && (
+            <Text style={styles.errorText}>{saveError}</Text>
+          )}
           <Button
-            label={step === 4 ? (isLastQuestion ? 'Finish questionnaire' : 'Next question') : step === TOTAL_STEPS - 1 ? 'Start discovering' : 'Continue'}
+            label={isSaving ? 'Saving...' : step === 4 ? (isLastQuestion ? 'Finish questionnaire' : 'Next question') : step === TOTAL_STEPS - 1 ? 'Start discovering' : 'Continue'}
             onPress={handleNext}
-            disabled={!canProceed()}
+            disabled={!canProceed() || isSaving}
           />
         </View>
       </SafeAreaView>
@@ -758,6 +794,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.xl,
     paddingTop: spacing.md,
+  },
+  errorText: {
+    fontFamily: fonts.body,
+    fontSize: 13,
+    color: colors.error[500],
+    textAlign: 'center',
+    marginBottom: spacing.sm,
   },
   valuesProgress: {
     marginBottom: spacing.lg,

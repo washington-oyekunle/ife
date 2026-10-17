@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -29,6 +29,8 @@ import {
 } from 'lucide-react-native';
 import { colors, fonts, spacing, borderRadius, shadow } from '@/constants/theme';
 import { interestOptions } from '@/data/profiles';
+import { fetchMyProfile, updateProfile } from '@/lib/api';
+import type { DbProfile } from '@/lib/types';
 
 export default function ProfileScreen() {
   const [avatarUri, setAvatarUri] = useState(
@@ -42,6 +44,31 @@ export default function ProfileScreen() {
   const [promptAnswer, setPromptAnswer] = useState(
     "Jollof at my mom's, a gallery opening, and dancing to Fela until midnight."
   );
+  const [profileName, setProfileName] = useState('Amara');
+  const [profileAge, setProfileAge] = useState('26');
+  const [profileCity, setProfileCity] = useState('Lagos, Nigeria');
+  const [myProfileId, setMyProfileId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetchMyProfile()
+      .then((me) => {
+        if (!me || !active) return;
+        const p = me as DbProfile;
+        setMyProfileId(p.id);
+        setProfileName(p.name);
+        setProfileAge(String(p.age));
+        setProfileCity(`${p.city}, ${p.country}`);
+        if (p.bio) setBio(p.bio);
+        if (p.interests.length > 0) setInterests(p.interests);
+        if (p.photos.length > 0) setAvatarUri(p.photos[0]);
+        if (p.prompts.length > 0) setPromptAnswer(p.prompts[0].answer);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const pickAvatar = useCallback(async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -80,7 +107,16 @@ export default function ProfileScreen() {
           {editing ? (
             <TouchableOpacity
               style={styles.saveBtn}
-              onPress={() => setEditing(false)}
+              onPress={() => {
+                setEditing(false);
+                if (myProfileId) {
+                  updateProfile(myProfileId, {
+                    bio,
+                    interests,
+                    prompts: [{ question: 'My ideal weekend looks like...', answer: promptAnswer }],
+                  } as Partial<DbProfile>).catch(() => undefined);
+                }
+              }}
             >
               <Check size={20} color={colors.secondary[600]} strokeWidth={2.5} />
               <Text style={styles.saveBtnText}>Save</Text>
@@ -100,11 +136,11 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
           <View style={styles.nameRow}>
-            <Text style={styles.name}>Amara</Text>
-            <Text style={styles.age}>26</Text>
+            <Text style={styles.name}>{profileName}</Text>
+            <Text style={styles.age}>{profileAge}</Text>
             <BadgeCheck size={22} color={colors.secondary[500]} strokeWidth={2} />
           </View>
-          <Text style={styles.location}>Lagos, Nigeria</Text>
+          <Text style={styles.location}>{profileCity}</Text>
 
           <View style={styles.statsRow}>
             <View style={styles.stat}>

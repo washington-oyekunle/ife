@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -14,18 +14,74 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Send, BadgeCheck, Search, X } from 'lucide-react-native';
 import { colors, fonts, spacing, borderRadius, shadow } from '@/constants/theme';
 import { conversations, Conversation, Message } from '@/data/profiles';
+import {
+  fetchMyProfile,
+  fetchConversations,
+  fetchMessages,
+  sendMessage as apiSendMessage,
+} from '@/lib/api';
+import type { DbProfile } from '@/lib/types';
 
 export default function ChatsScreen() {
   const [activeConv, setActiveConv] = useState<Conversation | null>(null);
-  const [messages, setMessages] = useState<Conversation[]>(conversations);
+  const [convs, setConvs] = useState<Conversation[]>(conversations);
   const [inputText, setInputText] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const filteredMessages = messages.filter((c) =>
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const me = await fetchMyProfile();
+        if (!me) return;
+        const dbConvs = await fetchConversations(me.id);
+        if (!active || dbConvs.length === 0) return;
+
+        const mapped = await Promise.all(
+          dbConvs.map(async (conv) => {
+            const otherId = conv.profile_a_id === me.id ? conv.profile_b_id : conv.profile_a_id;
+            const { supabase } = await import('@/lib/supabase');
+            const { data: otherProfile } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', otherId)
+              .maybeSingle();
+            const dbMsgs = await fetchMessages(conv.id);
+            const profile = otherProfile as DbProfile | null;
+            return {
+              id: conv.id,
+              profileId: otherId,
+              name: profile?.name || 'Unknown',
+              photo: profile?.photos?.[0] || '',
+              lastMessage: dbMsgs.length > 0 ? dbMsgs[dbMsgs.length - 1].text : 'Start a conversation',
+              lastMessageTime: dbMsgs.length > 0
+                ? new Date(dbMsgs[dbMsgs.length - 1].created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+                : '',
+              unread: 0,
+              messages: dbMsgs.map((m) => ({
+                id: m.id,
+                senderId: m.sender_id === me.id ? 'me' : otherId,
+                text: m.text,
+                time: new Date(m.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+              })),
+            } as Conversation;
+          })
+        );
+        if (active) setConvs(mapped);
+      } catch {
+        // keep seeded conversations as fallback
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const filteredMessages = convs.filter((c) =>
     c.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const sendMessage = () => {
+  const sendMessage = useCallback(() => {
     if (!inputText.trim() || !activeConv) return;
     const newMsg: Message = {
       id: Date.now().toString(),
@@ -33,7 +89,7 @@ export default function ChatsScreen() {
       text: inputText.trim(),
       time: 'Now',
     };
-    setMessages((prev) =>
+    setConvs((prev) =>
       prev.map((c) =>
         c.id === activeConv.id
           ? {
@@ -52,7 +108,12 @@ export default function ChatsScreen() {
         : null
     );
     setInputText('');
-  };
+
+    fetchMyProfile().then((me) => {
+      if (!me) return;
+      apiSendMessage(activeConv.id, me.id, newMsg.text).catch(() => undefined);
+    }).catch(() => undefined);
+  }, [inputText, activeConv]);
 
   if (activeConv) {
     return (

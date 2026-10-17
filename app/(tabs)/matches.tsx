@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -12,14 +12,52 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Heart, BadgeCheck, Sparkles, MessageCircle } from 'lucide-react-native';
 import { colors, fonts, spacing, borderRadius, shadow } from '@/constants/theme';
-import { matchProfiles } from '@/data/profiles';
+import { matchProfiles, Profile, myValuesAnswers } from '@/data/profiles';
+import { calculateCompatibility } from '@/data/values';
+import { fetchMatchProfiles, fetchMyProfile } from '@/lib/api';
+import type { DbProfile } from '@/lib/types';
 import { useRouter } from 'expo-router';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - spacing.lg * 3) / 2;
 
+function toMatchProfile(profile: DbProfile, myAnswers: typeof myValuesAnswers): Profile {
+  return {
+    id: profile.id,
+    name: profile.name,
+    age: profile.age,
+    city: profile.city,
+    country: profile.country,
+    occupation: profile.occupation || '',
+    education: profile.education || '',
+    bio: profile.bio || '',
+    photos: profile.photos,
+    interests: profile.interests,
+    prompts: profile.prompts,
+    verified: profile.verified,
+    distance: 0,
+    compatibility: calculateCompatibility(myAnswers, profile.values_answers).overall,
+    valuesAnswers: profile.values_answers,
+  };
+}
+
 export default function MatchesScreen() {
   const router = useRouter();
+  const [profiles, setProfiles] = useState<Profile[]>(matchProfiles);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([fetchMyProfile()]).then(async ([me]) => {
+      if (!me) return;
+      const remoteMatches = await fetchMatchProfiles(me.id);
+      if (active && remoteMatches.length > 0) {
+        setProfiles(remoteMatches.map((profile) => toMatchProfile(profile, me.values_answers as typeof myValuesAnswers)));
+      }
+    }).catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -27,12 +65,12 @@ export default function MatchesScreen() {
         <View style={styles.header}>
           <Text style={styles.title}>Your Matches</Text>
           <Text style={styles.subtitle}>
-            {matchProfiles.length} people who share your spark
+            {profiles.length} people who share your spark
           </Text>
         </View>
 
         <View style={styles.matchGrid}>
-          {matchProfiles.map((profile) => (
+          {profiles.map((profile) => (
             <TouchableOpacity
               key={profile.id}
               style={styles.matchCard}

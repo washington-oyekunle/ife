@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -28,13 +28,37 @@ import { colors, fonts, spacing, borderRadius, shadow } from '@/constants/theme'
 import { discoverProfiles, Profile, myValuesAnswers } from '@/data/profiles';
 import { calculateCompatibility } from '@/data/values';
 import { CompatibilityBreakdownCard } from '@/components/CompatibilityBreakdownCard';
+import { fetchDiscoverProfiles, fetchMyProfile, recordSwipe } from '@/lib/api';
+import type { DbProfile } from '@/lib/types';
 
 const { width, height } = Dimensions.get('window');
 const CARD_HEIGHT = height * 0.62;
 
+function toProfile(profile: DbProfile, myAnswers: typeof myValuesAnswers): Profile {
+  return {
+    id: profile.id,
+    name: profile.name,
+    age: profile.age,
+    city: profile.city,
+    country: profile.country,
+    occupation: profile.occupation || '',
+    education: profile.education || '',
+    bio: profile.bio || '',
+    photos: profile.photos,
+    interests: profile.interests,
+    prompts: profile.prompts,
+    verified: profile.verified,
+    distance: 0,
+    compatibility: calculateCompatibility(myAnswers, profile.values_answers).overall,
+    valuesAnswers: profile.values_answers,
+  };
+}
+
 export default function DiscoverScreen() {
   const [profiles, setProfiles] = useState(discoverProfiles);
   const [detailProfile, setDetailProfile] = useState<Profile | null>(null);
+  const [myProfileId, setMyProfileId] = useState<string | null>(null);
+  const [myAnswers, setMyAnswers] = useState(myValuesAnswers);
   const [likedIds, setLikedIds] = useState<string[]>([]);
   const [superLikedIds, setSuperLikedIds] = useState<string[]>([]);
   const [matchedProfile, setMatchedProfile] = useState<Profile | null>(null);
@@ -48,6 +72,25 @@ export default function DiscoverScreen() {
   const [appliedMinAge, setAppliedMinAge] = useState(18);
   const [appliedMaxAge, setAppliedMaxAge] = useState(45);
 
+  useEffect(() => {
+    let active = true;
+    Promise.all([fetchMyProfile(), fetchDiscoverProfiles()])
+      .then(([me, remoteProfiles]) => {
+        if (!active || remoteProfiles.length === 0) return;
+        if (me) {
+          setMyProfileId(me.id);
+          setMyAnswers(me.values_answers as typeof myValuesAnswers);
+        }
+        setProfiles(remoteProfiles.map((profile) => toProfile(profile, me?.values_answers || myValuesAnswers)));
+      })
+      .catch(() => {
+        if (active) setProfiles(discoverProfiles);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const handleAction = (action: 'pass' | 'like' | 'superlike') => {
     if (profiles.length === 0) return;
     Animated.timing(fadeAnim, {
@@ -55,6 +98,9 @@ export default function DiscoverScreen() {
       duration: 200,
       useNativeDriver: true,
     }).start(() => {
+      if (myProfileId) {
+        recordSwipe(myProfileId, profiles[0].id, action).catch(() => undefined);
+      }
       if (action === 'like') {
         setLikedIds((prev) => [...prev, profiles[0].id]);
         if (profiles[0].compatibility >= 85) {
@@ -215,7 +261,10 @@ export default function DiscoverScreen() {
           <TouchableOpacity
             style={styles.resetBtn}
             onPress={() => {
-              setProfiles(discoverProfiles);
+              setProfiles(discoverProfiles.map((profile) => ({
+                ...profile,
+                compatibility: calculateCompatibility(myAnswers, profile.valuesAnswers).overall,
+              })));
               setLikedIds([]);
               setSuperLikedIds([]);
             }}
@@ -456,7 +505,7 @@ export default function DiscoverScreen() {
 
               <View style={styles.detailBreakdownWrap}>
                 <CompatibilityBreakdownCard
-                  breakdown={calculateCompatibility(myValuesAnswers, detailProfile.valuesAnswers)}
+                  breakdown={calculateCompatibility(myAnswers, detailProfile.valuesAnswers)}
                   matchName={detailProfile.name}
                 />
               </View>
