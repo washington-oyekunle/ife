@@ -38,3 +38,11 @@ export type DbMessage = {
   text: string;
   created_at: string;
 };
+
+export type DbBlock = {
+  id: string;
+  blocker_id: string;
+  blocked_id: string;
+  reason: string | null;
+  created_at: string;
+};

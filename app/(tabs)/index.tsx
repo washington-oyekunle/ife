@@ -23,12 +23,14 @@ import {
   Sparkles,
   SlidersHorizontal,
   Check,
+  Flag,
+  Shield,
 } from 'lucide-react-native';
 import { colors, fonts, spacing, borderRadius, shadow } from '@/constants/theme';
 import { discoverProfiles, Profile, myValuesAnswers } from '@/data/profiles';
 import { calculateCompatibility } from '@/data/values';
 import { CompatibilityBreakdownCard } from '@/components/CompatibilityBreakdownCard';
-import { fetchDiscoverProfiles, fetchMyProfile, recordSwipe } from '@/lib/api';
+import { fetchDiscoverProfiles, fetchMyProfile, recordSwipe, blockProfile, fetchBlockedIds } from '@/lib/api';
 import type { DbProfile } from '@/lib/types';
 
 const { width, height } = Dimensions.get('window');
@@ -71,15 +73,29 @@ export default function DiscoverScreen() {
   const [appliedDistance, setAppliedDistance] = useState(50);
   const [appliedMinAge, setAppliedMinAge] = useState(18);
   const [appliedMaxAge, setAppliedMaxAge] = useState(45);
+  const [showReportSheet, setShowReportSheet] = useState(false);
+  const [blockedIds, setBlockedIds] = useState<string[]>([]);
+
+  const handleBlock = (reason?: string) => {
+    if (!myProfileId || !detailProfile) return;
+    blockProfile(myProfileId, detailProfile.id, reason).catch(() => undefined);
+    setBlockedIds((prev) => [...prev, detailProfile.id]);
+    setProfiles((prev) => prev.filter((p) => p.id !== detailProfile.id));
+    setShowReportSheet(false);
+    setDetailProfile(null);
+  };
 
   useEffect(() => {
     let active = true;
     Promise.all([fetchMyProfile(), fetchDiscoverProfiles()])
-      .then(([me, remoteProfiles]) => {
+      .then(async ([me, remoteProfiles]) => {
         if (!active || remoteProfiles.length === 0) return;
         if (me) {
           setMyProfileId(me.id);
           setMyAnswers(me.values_answers as typeof myValuesAnswers);
+          const blocked = await fetchBlockedIds(me.id).catch(() => [] as string[]);
+          setBlockedIds(blocked);
+          remoteProfiles = remoteProfiles.filter((p) => !blocked.includes(p.id));
         }
         setProfiles(remoteProfiles.map((profile) => toProfile(profile, me?.values_answers || myValuesAnswers)));
       })
@@ -566,6 +582,12 @@ export default function DiscoverScreen() {
                   <X size={26} color={colors.error[500]} strokeWidth={2.5} />
                 </TouchableOpacity>
                 <TouchableOpacity
+                  style={styles.detailReportBtn}
+                  onPress={() => setShowReportSheet(true)}
+                >
+                  <Flag size={22} color={colors.neutral[300]} strokeWidth={2} />
+                </TouchableOpacity>
+                <TouchableOpacity
                   style={styles.detailSuperLikeBtn}
                   onPress={() => {
                     setDetailProfile(null);
@@ -587,6 +609,41 @@ export default function DiscoverScreen() {
             </View>
           </ScrollView>
         )}
+      </Modal>
+
+      {/* Report / Block sheet */}
+      <Modal
+        visible={showReportSheet}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowReportSheet(false)}
+      >
+        <TouchableOpacity style={styles.reportOverlay} onPress={() => setShowReportSheet(false)}>
+          <View style={styles.reportSheet}>
+            <View style={styles.reportHeader}>
+              <Shield size={22} color={colors.error[500]} strokeWidth={2} />
+              <Text style={styles.reportTitle}>Report {detailProfile?.name}</Text>
+            </View>
+            <Text style={styles.reportSubtitle}>
+              Help keep ife safe. Blocked profiles won't appear in your feed.
+            </Text>
+            <TouchableOpacity style={styles.reportOption} onPress={() => handleBlock('Inappropriate photos')}>
+              <Text style={styles.reportOptionText}>Inappropriate photos</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.reportOption} onPress={() => handleBlock('Fake or misleading profile')}>
+              <Text style={styles.reportOptionText}>Fake or misleading profile</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.reportOption} onPress={() => handleBlock('Harassment or abusive behavior')}>
+              <Text style={styles.reportOptionText}>Harassment or abusive behavior</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.reportOption} onPress={() => handleBlock('Spam or scam')}>
+              <Text style={styles.reportOptionText}>Spam or scam</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.reportCancel} onPress={() => setShowReportSheet(false)}>
+              <Text style={styles.reportCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
       </Modal>
     </SafeAreaView>
   );
@@ -1191,5 +1248,67 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...shadow.md,
+  },
+  detailReportBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.neutral[30],
+    ...shadow.md,
+  },
+  reportOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  reportSheet: {
+    backgroundColor: '#fff',
+    borderRadius: borderRadius.xl,
+    padding: spacing.lg,
+    paddingBottom: spacing.xxl,
+  },
+  reportHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  reportTitle: {
+    fontFamily: fonts.headingBold,
+    fontSize: 18,
+    color: colors.neutral[600],
+  },
+  reportSubtitle: {
+    fontFamily: fonts.body,
+    fontSize: 14,
+    color: colors.neutral[200],
+    marginBottom: spacing.lg,
+    lineHeight: 20,
+  },
+  reportOption: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    backgroundColor: colors.neutral[10],
+    borderRadius: borderRadius.md,
+    marginBottom: spacing.sm,
+  },
+  reportOptionText: {
+    fontFamily: fonts.bodyMedium,
+    fontSize: 15,
+    color: colors.neutral[500],
+  },
+  reportCancel: {
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    marginTop: spacing.sm,
+  },
+  reportCancelText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 15,
+    color: colors.neutral[300],
   },
 });

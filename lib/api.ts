@@ -186,6 +186,33 @@ export async function sendMessage(conversationId: string, senderId: string, text
   return data as DbMessage;
 }
 
+// ---- Block / Report ----
+
+export async function blockProfile(blockerId: string, blockedId: string, reason?: string): Promise<void> {
+  const { error } = await supabase
+    .from('blocks')
+    .upsert({ blocker_id: blockerId, blocked_id: blockedId, reason: reason || null }, { onConflict: 'blocker_id,blocked_id' });
+  if (error) throw error;
+}
+
+export async function unblockProfile(blockerId: string, blockedId: string): Promise<void> {
+  const { error } = await supabase
+    .from('blocks')
+    .delete()
+    .eq('blocker_id', blockerId)
+    .eq('blocked_id', blockedId);
+  if (error) throw error;
+}
+
+export async function fetchBlockedIds(blockerId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('blocks')
+    .select('blocked_id')
+    .eq('blocker_id', blockerId);
+  if (error) throw error;
+  return (data || []).map((b: { blocked_id: string }) => b.blocked_id);
+}
+
 // ---- Storage ----
 
 export async function uploadProfilePhoto(uri: string, profileId: string): Promise<string> {

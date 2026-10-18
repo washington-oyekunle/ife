@@ -11,7 +11,7 @@ import {
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Send, BadgeCheck, Search, X } from 'lucide-react-native';
+import { ChevronLeft, Send, BadgeCheck, Search, X, MoreVertical, Shield, AlertCircle } from 'lucide-react-native';
 import { colors, fonts, spacing, borderRadius, shadow } from '@/constants/theme';
 import { conversations, Conversation, Message } from '@/data/profiles';
 import {
@@ -19,14 +19,18 @@ import {
   fetchConversations,
   fetchMessages,
   sendMessage as apiSendMessage,
+  blockProfile,
 } from '@/lib/api';
 import type { DbProfile } from '@/lib/types';
+import { supabase } from '@/lib/supabase';
 
 export default function ChatsScreen() {
   const [activeConv, setActiveConv] = useState<Conversation | null>(null);
   const [convs, setConvs] = useState<Conversation[]>(conversations);
   const [inputText, setInputText] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showConvMenu, setShowConvMenu] = useState(false);
+  const [myProfileId, setMyProfileId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -34,6 +38,7 @@ export default function ChatsScreen() {
       try {
         const me = await fetchMyProfile();
         if (!me) return;
+        if (active) setMyProfileId(me.id);
         const dbConvs = await fetchConversations(me.id);
         if (!active || dbConvs.length === 0) return;
 
@@ -76,6 +81,49 @@ export default function ChatsScreen() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!activeConv) return;
+    const channel = supabase
+      .channel(`messages:${activeConv.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${activeConv.id}` },
+        (payload) => {
+          const newMsg = payload.new as { id: string; sender_id: string; text: string; created_at: string };
+          if (myProfileId && newMsg.sender_id === myProfileId) return;
+          const msg: Message = {
+            id: newMsg.id,
+            senderId: newMsg.sender_id,
+            text: newMsg.text,
+            time: new Date(newMsg.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+          };
+          setActiveConv((prev) =>
+            prev ? { ...prev, messages: [...prev.messages, msg], lastMessage: msg.text }
+            : null
+          );
+          setConvs((prev) =>
+            prev.map((c) =>
+              c.id === activeConv.id
+                ? { ...c, messages: [...c.messages, msg], lastMessage: msg.text, lastMessageTime: 'Now' }
+                : c
+            )
+          );
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeConv, myProfileId]);
+
+  const handleBlock = useCallback(() => {
+    if (!myProfileId || !activeConv) return;
+    setShowConvMenu(false);
+    blockProfile(myProfileId, activeConv.profileId, 'reported from chat').catch(() => undefined);
+    setConvs((prev) => prev.filter((c) => c.id !== activeConv.id));
+    setActiveConv(null);
+  }, [myProfileId, activeConv]);
 
   const filteredMessages = convs.filter((c) =>
     c.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -133,7 +181,30 @@ export default function ChatsScreen() {
             </View>
             <Text style={styles.chatStatus}>Active now</Text>
           </View>
+          <TouchableOpacity style={styles.chatMenuBtn} onPress={() => setShowConvMenu(true)}>
+            <MoreVertical size={20} color={colors.neutral[400]} strokeWidth={2} />
+          </TouchableOpacity>
         </View>
+
+        <Modal
+          visible={showConvMenu}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowConvMenu(false)}
+        >
+          <TouchableOpacity style={styles.menuOverlay} onPress={() => setShowConvMenu(false)}>
+            <View style={styles.menuSheet}>
+              <TouchableOpacity style={styles.menuItem} onPress={handleBlock}>
+                <Shield size={20} color={colors.error[500]} strokeWidth={2} />
+                <Text style={styles.menuItemTextDanger}>Block & Report</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.menuItem} onPress={() => setShowConvMenu(false)}>
+                <AlertCircle size={20} color={colors.neutral[300]} strokeWidth={2} />
+                <Text style={styles.menuItemText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
 
         <FlatList
           data={activeConv.messages}
@@ -525,5 +596,42 @@ const styles = StyleSheet.create({
   },
   sendBtnDisabled: {
     backgroundColor: colors.neutral[40],
+  },
+  chatMenuBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  menuSheet: {
+    backgroundColor: '#fff',
+    borderRadius: borderRadius.lg,
+    padding: spacing.sm,
+    marginBottom: spacing.xl,
+    marginHorizontal: spacing.lg,
+    ...shadow.lg,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+  },
+  menuItemText: {
+    fontFamily: fonts.bodyMedium,
+    fontSize: 15,
+    color: colors.neutral[500],
+  },
+  menuItemTextDanger: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 15,
+    color: colors.error[500],
   },
 });
