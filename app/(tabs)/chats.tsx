@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Send, BadgeCheck, Search, X, MoreVertical, Shield, AlertCircle } from 'lucide-react-native';
@@ -45,7 +46,6 @@ export default function ChatsScreen() {
         const mapped = await Promise.all(
           dbConvs.map(async (conv) => {
             const otherId = conv.profile_a_id === me.id ? conv.profile_b_id : conv.profile_a_id;
-            const { supabase } = await import('@/lib/supabase');
             const { data: otherProfile } = await supabase
               .from('profiles')
               .select('*')
