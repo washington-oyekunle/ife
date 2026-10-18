@@ -21,11 +21,30 @@ export const categoryMeta: Record<string, { label: string; emoji: string }> = {
 
 export type ValuesAnswers = Record<string, number>;
 
+export type CompatibilityConflict = {
+  question: string;
+  reason: string;
+  severity: 'dealbreaker' | 'mismatch';
+};
+
 export type CompatibilityBreakdown = {
   overall: number;
   sharedValues: string[];
   complementary: string[];
+  conflicts: CompatibilityConflict[];
   categoryScores: { category: string; label: string; score: number }[];
+};
+
+type CategoryConfig = {
+  weight: number;
+  penalizeGaps: boolean;
+};
+
+const categoryConfig: Record<string, CategoryConfig> = {
+  intent: { weight: 1.4, penalizeGaps: true },
+  communication: { weight: 1.0, penalizeGaps: false },
+  values: { weight: 1.5, penalizeGaps: true },
+  lifestyle: { weight: 0.9, penalizeGaps: false },
 };
 
 export const valuesQuestions: ValuesQuestion[] = [
@@ -181,20 +200,31 @@ export function calculateCompatibility(
   const categoryScores: { category: string; label: string; score: number }[] = [];
   const sharedValues: string[] = [];
   const complementary: string[] = [];
+  const conflicts: CompatibilityConflict[] = [];
+
+  const questionMap = new Map(valuesQuestions.map((q) => [q.id, q]));
 
   categories.forEach((cat) => {
     const qIds = categoryQuestions[cat] || [];
-    let totalDiff = 0;
+    const config = categoryConfig[cat] || { weight: 1, penalizeGaps: false };
+    let weightedDiffSum = 0;
+    let weightTotal = 0;
     let exactMatches = 0;
     let closeMatches = 0;
 
     qIds.forEach((qId) => {
+      const question = questionMap.get(qId);
+      if (!question) return;
+
       const myVal = myAnswers[qId];
       const theirVal = theirAnswers[qId];
       if (myVal === undefined || theirVal === undefined) return;
 
       const diff = Math.abs(myVal - theirVal);
-      totalDiff += diff;
+
+      const questionWeight = question.isDealbreaker ? 2.0 : 1.0;
+      weightedDiffSum += diff * questionWeight;
+      weightTotal += 3 * questionWeight;
 
       if (diff === 0) {
         exactMatches++;
@@ -206,23 +236,56 @@ export function calculateCompatibility(
         if (cat === 'communication') {
           complementary.push('Complementary communication styles');
         }
+      } else if (diff >= 2 && cat === 'lifestyle') {
+        complementary.push('Different-but-balanced lifestyle rhythms');
+      }
+
+      if (question.isDealbreaker && diff >= 2) {
+        conflicts.push({
+          question: question.question,
+          reason: 'Far apart on a dealbreaker question',
+          severity: 'dealbreaker',
+        });
+      } else if (diff >= 3) {
+        conflicts.push({
+          question: question.question,
+          reason: 'Opposite ends of the spectrum',
+          severity: 'mismatch',
+        });
+      } else if (diff === 2 && config.penalizeGaps && question.isDealbreaker) {
+        conflicts.push({
+          question: question.question,
+          reason: 'Notable gap on a key question',
+          severity: 'mismatch',
+        });
       }
     });
 
-    const maxDiff = qIds.length * 3;
-    const score = Math.round(100 - (totalDiff / maxDiff) * 100);
+    const score = weightTotal > 0
+      ? Math.round(100 - (weightedDiffSum / weightTotal) * 100)
+      : 70;
+
     categoryScores.push({
       category: cat,
       label: categoryLabels[cat],
-      score: Math.max(40, Math.min(100, score)),
+      score: Math.max(20, Math.min(100, score)),
     });
   });
 
-  const overall = Math.round(
-    categoryScores.reduce((sum, c) => sum + c.score, 0) / categoryScores.length
+  const totalWeight = categories.reduce(
+    (sum, cat) => sum + (categoryConfig[cat]?.weight || 1),
+    0
   );
+  const weightedSum = categoryScores.reduce(
+    (sum, c) => sum + c.score * (categoryConfig[c.category]?.weight || 1),
+    0
+  );
+  let overall = Math.round(weightedSum / totalWeight);
 
-  // Deduplicate
+  const dealbreakerCount = conflicts.filter((c) => c.severity === 'dealbreaker').length;
+  overall -= dealbreakerCount * 12;
+  overall = Math.max(5, Math.min(100, overall));
+
   const uniqueShared = [...new Set(sharedValues)].slice(0, 3);
   const uniqueComplementary = [...new Set(complementary)].slice(0, 2);
 
@@ -239,10 +302,13 @@ export function calculateCompatibility(
     }
   }
 
+  const topConflicts = conflicts.slice(0, 2);
+
   return {
     overall,
     sharedValues: uniqueShared,
     complementary: uniqueComplementary,
+    conflicts: topConflicts,
     categoryScores,
   };
 }

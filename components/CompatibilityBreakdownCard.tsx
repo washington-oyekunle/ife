@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { Sparkles, Check, Heart, MessageCircle, Scale, Zap } from 'lucide-react-native';
+import { Sparkles, Check, Heart, MessageCircle, Scale, Zap, AlertTriangle } from 'lucide-react-native';
 import { colors, fonts, spacing, borderRadius, shadow } from '@/constants/theme';
 import { CompatibilityBreakdown } from '@/data/values';
 
@@ -72,6 +72,34 @@ export function CompatibilityBreakdownCard({ breakdown, matchName }: Props) {
                 <Sparkles size={12} color={colors.accent[600]} strokeWidth={2} />
               </View>
               <Text style={styles.tagText}>{val}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {breakdown.conflicts.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Points of difference</Text>
+          {breakdown.conflicts.map((conflict, i) => (
+            <View key={i} style={styles.conflictRow}>
+              <View
+                style={[
+                  styles.conflictIcon,
+                  conflict.severity === 'dealbreaker' && styles.conflictIconDealbreaker,
+                ]}
+              >
+                <AlertTriangle
+                  size={12}
+                  color={conflict.severity === 'dealbreaker' ? colors.error[600] : colors.warning[600]}
+                  strokeWidth={2}
+                />
+              </View>
+              <View style={styles.conflictTextWrap}>
+                <Text style={styles.conflictQuestion} numberOfLines={1}>
+                  {conflict.question}
+                </Text>
+                <Text style={styles.conflictReason}>{conflict.reason}</Text>
+              </View>
             </View>
           ))}
         </View>
@@ -190,6 +218,38 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodyMedium,
     fontSize: 14,
     color: colors.neutral[400],
+  },
+  conflictRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    paddingVertical: 3,
+  },
+  conflictIcon: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.warning[50],
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  conflictIconDealbreaker: {
+    backgroundColor: colors.error[50],
+  },
+  conflictTextWrap: {
+    flex: 1,
+  },
+  conflictQuestion: {
+    fontFamily: fonts.bodyMedium,
+    fontSize: 13,
+    color: colors.neutral[400],
+  },
+  conflictReason: {
+    fontFamily: fonts.body,
+    fontSize: 12,
+    color: colors.neutral[200],
+    marginTop: 1,
   },
   scoresSection: {
     marginTop: spacing.sm,
