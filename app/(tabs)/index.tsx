@@ -29,6 +29,7 @@ import {
 import { colors, fonts, spacing, borderRadius, shadow } from '@/constants/theme';
 import { discoverProfiles, Profile, myValuesAnswers } from '@/data/profiles';
 import { calculateCompatibility } from '@/data/values';
+import { rankProfilesByFit } from '@/data/matching';
 import { CompatibilityBreakdownCard } from '@/components/CompatibilityBreakdownCard';
 import { fetchDiscoverProfiles, fetchMyProfile, recordSwipe, blockProfile, fetchBlockedIds } from '@/lib/api';
 import type { DbProfile } from '@/lib/types';
@@ -56,8 +57,15 @@ function toProfile(profile: DbProfile, myAnswers: typeof myValuesAnswers): Profi
   };
 }
 
+function getDemoDiscoverProfiles(): Profile[] {
+  return rankProfilesByFit(discoverProfiles.map((profile) => ({
+    ...profile,
+    compatibility: calculateCompatibility(myValuesAnswers, profile.valuesAnswers).overall,
+  })));
+}
+
 export default function DiscoverScreen() {
-  const [profiles, setProfiles] = useState(discoverProfiles);
+  const [profiles, setProfiles] = useState<Profile[]>(getDemoDiscoverProfiles);
   const [detailProfile, setDetailProfile] = useState<Profile | null>(null);
   const [myProfileId, setMyProfileId] = useState<string | null>(null);
   const [myAnswers, setMyAnswers] = useState(myValuesAnswers);
@@ -97,10 +105,12 @@ export default function DiscoverScreen() {
           setBlockedIds(blocked);
           remoteProfiles = remoteProfiles.filter((p) => !blocked.includes(p.id));
         }
-        setProfiles(remoteProfiles.map((profile) => toProfile(profile, me?.values_answers || myValuesAnswers)));
+        const viewerAnswers = me?.values_answers || myValuesAnswers;
+        const rankedProfiles = remoteProfiles.map((profile) => toProfile(profile, viewerAnswers));
+        setProfiles(rankProfilesByFit(rankedProfiles, me?.interests || []));
       })
       .catch(() => {
-        if (active) setProfiles(discoverProfiles);
+        if (active) setProfiles(getDemoDiscoverProfiles());
       });
     return () => {
       active = false;

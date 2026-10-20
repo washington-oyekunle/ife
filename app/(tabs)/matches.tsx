@@ -14,6 +14,7 @@ import { Heart, BadgeCheck, Sparkles, MessageCircle } from 'lucide-react-native'
 import { colors, fonts, spacing, borderRadius, shadow } from '@/constants/theme';
 import { matchProfiles, Profile, myValuesAnswers } from '@/data/profiles';
 import { calculateCompatibility } from '@/data/values';
+import { rankProfilesByFit } from '@/data/matching';
 import { fetchMatchProfiles, fetchMyProfile } from '@/lib/api';
 import type { DbProfile } from '@/lib/types';
 import { useRouter } from 'expo-router';
@@ -41,9 +42,16 @@ function toMatchProfile(profile: DbProfile, myAnswers: typeof myValuesAnswers): 
   };
 }
 
+function getDemoMatchProfiles(): Profile[] {
+  return rankProfilesByFit(matchProfiles.map((profile) => ({
+    ...profile,
+    compatibility: calculateCompatibility(myValuesAnswers, profile.valuesAnswers).overall,
+  })));
+}
+
 export default function MatchesScreen() {
   const router = useRouter();
-  const [profiles, setProfiles] = useState<Profile[]>(matchProfiles);
+  const [profiles, setProfiles] = useState<Profile[]>(getDemoMatchProfiles);
 
   useEffect(() => {
     let active = true;
@@ -51,7 +59,8 @@ export default function MatchesScreen() {
       if (!me) return;
       const remoteMatches = await fetchMatchProfiles(me.id);
       if (active && remoteMatches.length > 0) {
-        setProfiles(remoteMatches.map((profile) => toMatchProfile(profile, me.values_answers as typeof myValuesAnswers)));
+        const rankedProfiles = remoteMatches.map((profile) => toMatchProfile(profile, me.values_answers as typeof myValuesAnswers));
+        setProfiles(rankProfilesByFit(rankedProfiles, me.interests || []));
       }
     }).catch(() => undefined);
     return () => {

@@ -29,23 +29,36 @@ export type CompatibilityConflict = {
 
 export type CompatibilityBreakdown = {
   overall: number;
+  coverage: number;
   sharedValues: string[];
   complementary: string[];
   conflicts: CompatibilityConflict[];
   categoryScores: { category: string; label: string; score: number }[];
 };
 
-type CategoryConfig = {
-  weight: number;
-  penalizeGaps: boolean;
+// Category weights balance the overall score; question weights distinguish
+// high-impact topics from preferences that are usually easier to negotiate.
+const categoryWeights: Record<string, number> = {
+  intent: 1.3,
+  communication: 1.1,
+  values: 1.35,
+  lifestyle: 0.8,
 };
 
-const categoryConfig: Record<string, CategoryConfig> = {
-  intent: { weight: 1.4, penalizeGaps: true },
-  communication: { weight: 1.0, penalizeGaps: false },
-  values: { weight: 1.5, penalizeGaps: true },
-  lifestyle: { weight: 0.9, penalizeGaps: false },
+const questionWeights: Record<string, number> = {
+  intent: 1.6,
+  timeline: 1.1,
+  communication: 1.1,
+  attachment: 0.9,
+  family: 1.5,
+  faith: 1.1,
+  ambition: 0.9,
+  pace: 0.8,
+  social: 0.8,
+  dealbreaker: 0.35,
 };
+
+const ordinalSimilarity = [100, 78, 50, 20];
 
 export const valuesQuestions: ValuesQuestion[] = [
   {
@@ -190,122 +203,97 @@ export function calculateCompatibility(
   theirAnswers: ValuesAnswers
 ): CompatibilityBreakdown {
   const categories = ['intent', 'communication', 'values', 'lifestyle'] as const;
-  const categoryQuestions: Record<string, string[]> = {};
-
-  valuesQuestions.forEach((q) => {
-    if (!categoryQuestions[q.category]) categoryQuestions[q.category] = [];
-    categoryQuestions[q.category].push(q.id);
-  });
-
   const categoryScores: { category: string; label: string; score: number }[] = [];
   const sharedValues: string[] = [];
   const complementary: string[] = [];
   const conflicts: CompatibilityConflict[] = [];
-
-  const questionMap = new Map(valuesQuestions.map((q) => [q.id, q]));
+  const categoryCoverage: Record<string, number> = {};
 
   categories.forEach((cat) => {
-    const qIds = categoryQuestions[cat] || [];
-    const config = categoryConfig[cat] || { weight: 1, penalizeGaps: false };
-    let weightedDiffSum = 0;
-    let weightTotal = 0;
-    let exactMatches = 0;
-    let closeMatches = 0;
+    const questions = valuesQuestions.filter((question) => question.category === cat);
+    let possibleWeight = 0;
+    let answeredWeight = 0;
+    let weightedScore = 0;
 
-    qIds.forEach((qId) => {
-      const question = questionMap.get(qId);
-      if (!question) return;
+    questions.forEach((question) => {
+      const questionWeight = questionWeights[question.id] ?? 1;
+      possibleWeight += questionWeight;
+      const myVal = myAnswers?.[question.id];
+      const theirVal = theirAnswers?.[question.id];
+      const maxValue = question.options.length - 1;
+      const myAnswered = Number.isInteger(myVal) && myVal! >= 0 && myVal! <= maxValue;
+      const theirAnswered = Number.isInteger(theirVal) && theirVal! >= 0 && theirVal! <= maxValue;
+      if (!myAnswered || !theirAnswered) return;
 
-      const myVal = myAnswers[qId];
-      const theirVal = theirAnswers[qId];
-      if (myVal === undefined || theirVal === undefined) return;
+      answeredWeight += questionWeight;
+      const diff = Math.abs(myVal! - theirVal!);
+      // A dealbreaker response is a category, not an ordered scale.
+      const questionScore = question.id === 'dealbreaker'
+        ? (diff === 0 ? 100 : 70)
+        : ordinalSimilarity[diff];
+      weightedScore += questionScore * questionWeight;
 
-      const diff = Math.abs(myVal - theirVal);
-
-      const questionWeight = question.isDealbreaker ? 2.0 : 1.0;
-      weightedDiffSum += diff * questionWeight;
-      weightTotal += 3 * questionWeight;
-
-      if (diff === 0) {
-        exactMatches++;
-        if (cat === 'values') {
-          sharedValues.push(getSharedValueLabel(qId, myVal));
-        }
-      } else if (diff === 1) {
-        closeMatches++;
-        if (cat === 'communication') {
-          complementary.push('Complementary communication styles');
-        }
-      } else if (diff >= 2 && cat === 'lifestyle') {
-        complementary.push('Different-but-balanced lifestyle rhythms');
+      if (diff === 0 && ['intent', 'family', 'faith', 'ambition', 'dealbreaker'].includes(question.id)) {
+        sharedValues.push(getSharedValueLabel(question.id, myVal!));
+      }
+      if (cat === 'lifestyle' && diff === 1) {
+        complementary.push(question.id === 'pace'
+          ? 'Close on preferred life pace'
+          : 'Similar social rhythms');
       }
 
-      if (question.isDealbreaker && diff >= 2) {
+      const highStakes = question.id === 'intent' || question.id === 'family';
+      if ((highStakes && diff >= 2) || (!highStakes && question.id !== 'dealbreaker' && diff === 3)) {
+        const myLabel = question.options.find((option) => option.value === myVal)?.label;
+        const theirLabel = question.options.find((option) => option.value === theirVal)?.label;
         conflicts.push({
           question: question.question,
-          reason: 'Far apart on a dealbreaker question',
-          severity: 'dealbreaker',
-        });
-      } else if (diff >= 3) {
-        conflicts.push({
-          question: question.question,
-          reason: 'Opposite ends of the spectrum',
-          severity: 'mismatch',
-        });
-      } else if (diff === 2 && config.penalizeGaps && question.isDealbreaker) {
-        conflicts.push({
-          question: question.question,
-          reason: 'Notable gap on a key question',
-          severity: 'mismatch',
+          reason: `You selected “${myLabel}”; they selected “${theirLabel}”.`,
+          severity: highStakes && diff === 3 ? 'dealbreaker' : 'mismatch',
         });
       }
     });
 
-    const score = weightTotal > 0
-      ? Math.round(100 - (weightedDiffSum / weightTotal) * 100)
-      : 70;
-
+    const coverage = possibleWeight > 0 ? answeredWeight / possibleWeight : 0;
+    categoryCoverage[cat] = coverage;
     categoryScores.push({
       category: cat,
       label: categoryLabels[cat],
-      score: Math.max(20, Math.min(100, score)),
+      score: answeredWeight > 0 ? Math.round(weightedScore / answeredWeight) : 50,
     });
   });
 
-  const totalWeight = categories.reduce(
-    (sum, cat) => sum + (categoryConfig[cat]?.weight || 1),
+  const totalCategoryWeight = categories.reduce((sum, cat) => sum + categoryWeights[cat], 0);
+  const answeredCategoryWeight = categories.reduce(
+    (sum, cat) => sum + categoryWeights[cat] * categoryCoverage[cat],
     0
   );
-  const weightedSum = categoryScores.reduce(
-    (sum, c) => sum + c.score * (categoryConfig[c.category]?.weight || 1),
+  const weightedKnownScore = categoryScores.reduce(
+    (sum, category) => sum + category.score * categoryWeights[category.category] * categoryCoverage[category.category],
     0
   );
-  let overall = Math.round(weightedSum / totalWeight);
-
-  const dealbreakerCount = conflicts.filter((c) => c.severity === 'dealbreaker').length;
-  overall -= dealbreakerCount * 12;
-  overall = Math.max(5, Math.min(100, overall));
+  const knownScore = answeredCategoryWeight > 0 ? weightedKnownScore / answeredCategoryWeight : 50;
+  const coverage = totalCategoryWeight > 0 ? answeredCategoryWeight / totalCategoryWeight : 0;
+  let overall = Math.round(50 + (knownScore - 50) * coverage);
+  const highStakesConflicts = conflicts.filter((conflict) => conflict.severity === 'dealbreaker').length;
+  overall = Math.max(0, Math.min(100, overall - Math.min(10, highStakesConflicts * 5)));
 
   const uniqueShared = [...new Set(sharedValues)].slice(0, 3);
   const uniqueComplementary = [...new Set(complementary)].slice(0, 2);
-
   if (uniqueShared.length === 0) {
-    const valuesScore = categoryScores.find((c) => c.category === 'values');
-    if (valuesScore && valuesScore.score >= 70) {
-      uniqueShared.push('Shared core values');
-    }
-  }
-  if (uniqueComplementary.length === 0) {
-    const commScore = categoryScores.find((c) => c.category === 'communication');
-    if (commScore && commScore.score >= 70) {
-      uniqueComplementary.push('Thoughtful communicator');
+    const valuesScore = categoryScores.find((category) => category.category === 'values');
+    if (valuesScore && valuesScore.score >= 80 && categoryCoverage.values >= 0.5) {
+      uniqueShared.push('Strong alignment on core values');
     }
   }
 
-  const topConflicts = conflicts.slice(0, 2);
+  const topConflicts = conflicts
+    .sort((a, b) => (a.severity === 'dealbreaker' ? -1 : 0) - (b.severity === 'dealbreaker' ? -1 : 0))
+    .slice(0, 2);
 
   return {
     overall,
+    coverage: Math.round(coverage * 100),
     sharedValues: uniqueShared,
     complementary: uniqueComplementary,
     conflicts: topConflicts,

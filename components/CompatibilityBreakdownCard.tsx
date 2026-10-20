@@ -44,7 +44,9 @@ export function CompatibilityBreakdownCard({ breakdown, matchName }: Props) {
             {matchName ? `Compatibility with ${matchName}` : 'Compatibility breakdown'}
           </Text>
           <Text style={styles.subtitle}>
-            Based on values, lifestyle & communication
+            {breakdown.coverage < 100
+              ? `Based on ${breakdown.coverage}% of your answers`
+              : 'Based on values, lifestyle & communication'}
           </Text>
         </View>
       </View>
